@@ -8,10 +8,16 @@
 
 #include <gphoto2/gphoto2.h>
 #include <string>
+#include <vector>
 
 using std::string;
+using std::vector;
 
 static const string NOT_A_GOOD_SERIAL = "NOT_A_GOOD_SERIAL";
+
+static const string CONFIG_SERIAL_NUMBER = "serialnumber";
+static const string CONFIG_EXPOSURE_TIME = "500d";
+
 class CameraWrapper
 {
 public:
@@ -30,6 +36,8 @@ public:
 
     string getSerialNumber();
 
+    void capture();
+
     /**
      * Gets the value of a config of type text.
      * Use gphoto2 --list-config to view the available configs.
@@ -37,13 +45,38 @@ public:
      * serialnumber
      * @return The config value, or an empty string if there was an error.
      */
-    string getTextConfig(string config);
+    string getTextConfigValue(string config);
+    bool setConfigValue(string config_name, string val);
+
+    vector<string> listConfigChoices(string config);
+
+    /**
+     * Returns current exposure time in microseconds. 0 if BULB, -1 if error
+     * @return
+     */
+    int getCurrentExposureTime();
+
+    /**
+     * Sets the exposure time on the camera to the specified index
+     * @param index Exposure time index (obtained from
+     * listAvailableExposureTimes())
+     * @return True if success
+     */
+    bool setExposureTime(int index);
+
+    /**
+     * Ordered list of available exposure times in microseconds. 0 if BULB
+     * @return
+     */
+    vector<int> listAvailableExposureTimes();
 
 private:
     CameraWrapper();
     ~CameraWrapper();
 
     void freeCamera();
+
+    static int exposureTimeFromString(string exposure_time);
 
     string serial = NOT_A_GOOD_SERIAL;
 
