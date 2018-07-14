@@ -1,14 +1,28 @@
 #include "CameraWrapper.h"
 
+#include <chrono>
+#include <cstdio>
+#include <thread>
+#include "functions/intervalometer.h"
+
+using namespace std::chrono;
+using namespace std::this_thread;
+
+using std::chrono::milliseconds;
+
 int main()
 {
-    CameraWrapper& w = CameraWrapper::getInstance();
+    // CameraWrapper& w = CameraWrapper::getInstance();
 
-    bool c = w.isConnected();
-    printf("Connected: %s\n", c ? "true" : "false");
-    w.connect();
+    Intervalometer i(5, 5 * 1000 * 1000);
 
-    c = w.isConnected();
-    printf("Connected: %s\n", c ? "true" : "false");
+    printf("Starting...\n");
+    i.start();
+
+    sleep_for(milliseconds(30 * 1000));
+    printf("Aborting...\n");
+    i.abort();
+
+    sleep_for(milliseconds(5 * 1000));
     return 0;
 }
