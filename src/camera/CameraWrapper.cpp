@@ -169,6 +169,7 @@ int CameraWrapper::getCurrentExposureTime()
 bool CameraWrapper::setExposureTime(int index)
 {
     vector<string> exposures = listConfigChoices(CONFIG_EXPOSURE_TIME);
+
     if (index >= 0 && (unsigned)index < exposures.size())
     {
         return setConfigValue(CONFIG_EXPOSURE_TIME, exposures[index]);
