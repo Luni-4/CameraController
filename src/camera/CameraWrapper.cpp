@@ -6,7 +6,13 @@
 #include "CameraWrapper.h"
 #include <gphoto2/gphoto2.h>
 #include <cmath>
+
+#include <chrono>
+#include <cstdio>
+#include <thread>
 #include "debug.h"
+
+using std::chrono::seconds;
 
 CameraWrapper::CameraWrapper() : context(gp_context_new()) {}
 
@@ -18,6 +24,7 @@ void CameraWrapper::freeCamera()
     {
         gp_camera_exit(camera, context);
         gp_camera_free(camera);
+        camera = nullptr;
     }
 }
 
@@ -28,23 +35,31 @@ bool CameraWrapper::connect()
     if (result == GP_OK)
     {
         serial = getSerialNumber();
+
+        // Sleep for 2 seconds to avoid errors if capturing too early
+        std::this_thread::sleep_for(seconds(2));
+
         D(printf("Connected to camera: %s\n", serial.c_str()));
         return true;
     }
+    camera = nullptr;
     return false;
 }
 
 bool CameraWrapper::isConnected()
 {
-    if (getSerialNumber() == serial)
-    {
-        return true;
-    }
-
     if (camera != nullptr)
     {
-        freeCamera();
-        serial = NOT_A_GOOD_SERIAL;
+        if (getSerialNumber() == serial)
+        {
+            return true;
+        }
+
+        if (camera != nullptr)
+        {
+            freeCamera();
+            serial = NOT_A_GOOD_SERIAL;
+        }
     }
     return false;
 }
@@ -52,6 +67,11 @@ bool CameraWrapper::isConnected()
 bool CameraWrapper::capture()
 {
     CameraFilePath path;
+    return capture(path);
+}
+
+bool CameraWrapper::capture(CameraFilePath& path)
+{
     int result = gp_camera_capture(camera, GP_CAPTURE_IMAGE, &path, context);
 
     if (result == GP_OK)
@@ -59,7 +79,69 @@ bool CameraWrapper::capture()
         D(printf("Captured to: %s/%s\n", path.folder, path.name));
         return true;
     }
-    return false;
+    else
+    {
+        D(printf("Error capturing picture: %d\n", result));
+        return false;
+    }
+}
+
+bool CameraWrapper::downloadFile(CameraFilePath path, string dest_file_path)
+{
+    CameraFile* file;
+    int result, fd;
+    bool success = false, gp_file_created = false;
+
+    D(printf("Download dest: %s\n", dest_file_path.c_str()));
+    FILE* f = fopen(dest_file_path.c_str(), "w");
+
+    if (f == NULL)
+    {
+        /*D(printf("Error opening file (%s): %d\n", dest_file_path.c_str(),
+                 errno));*/
+        goto out;
+    }
+
+    fd = fileno(f);
+
+    if (fd < 0)
+    {
+        D(printf("Error getting file descriptor (%s): %d\n",
+                 dest_file_path.c_str(), fd));
+        goto out;
+    }
+
+    result = gp_file_new_from_fd(&file, fd);
+    if (result != GP_OK)
+    {
+        D(printf("Error creating CameraFile (%s): %d\n", dest_file_path.c_str(),
+                 result));
+        goto out;
+    }
+    else
+    {
+        gp_file_created = true;
+    }
+
+    result = gp_camera_file_get(camera, path.folder, path.name,
+                                GP_FILE_TYPE_RAW, file, context);
+    if (result != GP_OK)
+    {
+        D(printf("Error getting file from camera (%s): %d\n",
+                 dest_file_path.c_str(), result));
+        goto out;
+    }
+    success = true;
+out:
+    if (f != NULL)
+    {
+        fclose(f);
+    }
+    if (gp_file_created)
+    {
+        gp_file_free(file);
+    }
+    return success;
 }
 
 string CameraWrapper::getSerialNumber()
@@ -229,4 +311,50 @@ int CameraWrapper::exposureTimeFromString(string exposure_time)
 {
     int exp_time = stoi(exposure_time) * 100;
     return exp_time != -100 ? exp_time : 0;  // Change BULB from -100 to 0}
+}
+
+bool CameraWrapper::waitForCapture()
+{
+    CameraEventType type;
+    void* data;
+
+    auto start = std::chrono::system_clock::now();
+
+    int res = gp_camera_wait_for_event(camera, 30000, &type, &data, context);
+
+    if (res != GP_OK)
+    {
+        return false;
+    }
+    auto end = std::chrono::system_clock::now();
+
+    int dur =
+        std::chrono::milliseconds(
+            std::chrono::duration_cast<std::chrono::milliseconds>(end - start))
+            .count();
+    switch (type)
+    {
+        case GP_EVENT_UNKNOWN:
+            printf("GP_EVENT_UNKNOWN T:%d ms\n", dur);
+            break;
+        case GP_EVENT_TIMEOUT:
+            printf("GP_EVENT_TIMEOUT T:%d ms\n", dur);
+            break;
+        case GP_EVENT_FILE_ADDED:
+            printf("GP_EVENT_FILE_ADDED T:%d ms\n", dur);
+            break;
+        case GP_EVENT_FOLDER_ADDED:
+            printf("GP_EVENT_FOLDER_ADDED T:%d ms\n", dur);
+            break;
+        case GP_EVENT_CAPTURE_COMPLETE:
+            printf("GP_EVENT_CAPTURE_COMPLETE T:%d ms\n", dur);
+            break;
+        case GP_EVENT_FILE_CHANGED:
+            printf("GP_EVENT_FILE_CHANGED T:%d ms\n", dur);
+            break;
+        default:
+            printf("WTF event T:%d ms\n", dur);
+    }
+
+    return true;
 }

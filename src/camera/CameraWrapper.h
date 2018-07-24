@@ -38,6 +38,10 @@ public:
 
     bool capture();
 
+    bool capture(CameraFilePath& path);
+
+    bool downloadFile(CameraFilePath path, string destination);
+
     /**
      * Gets the value of a config of type text.
      * Use gphoto2 --list-config to view the available configs.
@@ -63,6 +67,12 @@ public:
      * @return True if success
      */
     bool setExposureTime(int index);
+
+    /**
+     * Wait until a capture triggered by an external event is complete
+     * @return true if the event occurred, false if there were problems
+     */
+    bool waitForCapture();
 
     /**
      * Ordered list of available exposure times in microseconds. 0 if BULB

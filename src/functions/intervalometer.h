@@ -16,6 +16,8 @@
 #include <string>
 #include <thread>
 
+#include "camera/CameraWrapper.h"
+
 using std::atomic_bool;
 
 using std::condition_variable;
@@ -25,7 +27,7 @@ using std::string;
 using std::thread;
 using std::unique_ptr;
 using std::chrono::duration;
-using std::chrono::microseconds;
+using std::chrono::milliseconds;
 
 class Intervalometer
 {
@@ -60,12 +62,12 @@ public:
     /**
      * Constructor
      * @param n_shots Number of exposures to take
-     * @param interval Time between the start of each exposure
+     * @param interval Time between the start of each exposure in milliseconds
      */
     Intervalometer(int n_exposures, int interval);
     ~Intervalometer();
 
-    void start();
+    bool start();
 
     void abort();
 
@@ -94,7 +96,7 @@ private:
     bool started = false;
     atomic_bool finished{};
 
-    const microseconds interval;
+    const milliseconds interval;
     const int num_shots;
 
     IntervalometerStats stats;
@@ -105,7 +107,9 @@ private:
 
     unique_ptr<thread> thread_run;
 
-    CameraFilePath last_shot;
+    CameraFilePath last_shot_path;
+
+    CameraWrapper& camera;
 };
 
 #endif /* SRC_FUNCTIONS_INTERVALOMETER_H */

@@ -11,7 +11,6 @@ using namespace std::this_thread;
 using std::unique_lock;
 
 using std::chrono::duration_cast;
-using std::chrono::microseconds;
 using std::chrono::milliseconds;
 using std::chrono::system_clock;
 
@@ -19,24 +18,32 @@ typedef unique_lock<mutex> Lock;
 typedef system_clock Clock;
 
 Intervalometer::Intervalometer(int n_exposures, int interval)
-    : interval(microseconds(interval)), num_shots(n_exposures)
+    : interval(milliseconds(interval)), num_shots(n_exposures),
+      camera(CameraWrapper::getInstance())
 {
-    printf("%d\n", (int)this->interval.count());
-    printf("a %s\n", abort_cond ? "T" : "F");
 }
 
 Intervalometer::~Intervalometer() {}
 
-void Intervalometer::start()
+bool Intervalometer::start()
 {
     if (!started)
     {
+        if (!camera.isConnected())
+        {
+            if (!camera.connect())
+            {
+                return false;
+            }
+        }
         started = true;
 
         // Start the run thread
         thread_run = unique_ptr<thread>(new thread(&Intervalometer::run, this));
         thread_run.get()->detach();
     }
+
+    return true;
 }
 
 void Intervalometer::abort()
@@ -74,7 +81,7 @@ void Intervalometer::run()
 
         Lock lk(mutex_run);
 
-        last_shot = p;
+        last_shot_path = p;
         stats.registerExposureStat(-1 * (int)remaining.count());
 
         while (!abort_cond)
@@ -97,8 +104,18 @@ void Intervalometer::run()
 CameraFilePath Intervalometer::capture()
 {
     CameraFilePath path;
-    sleep_for(milliseconds(2 * 1000));
+    camera.capture(path);
+    // sleep_for(milliseconds(2 * 1000));
     return path;
 }
 
-bool Intervalometer::downloadLastPicture(string path) { return false; }
+bool Intervalometer::downloadLastPicture(string destination_folder)
+{
+    CameraFilePath p;
+    {
+        Lock lk(mutex_run);
+        p = last_shot_path;
+    }
+
+    return camera.downloadFile(p, destination_folder + string(p.name));
+}
