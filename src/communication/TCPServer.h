@@ -30,14 +30,13 @@ using std::thread;
 
 using std::unique_ptr;
 
-static const unsigned int SEND_BUF_SIZE   = 1024 * 1024;  // 1 MiB
-static const unsigned int STREAM_BUF_SIZE = 2048;         // 2 KiB
-static const unsigned int RECV_BUF_SIZE   = 512;          // 512 Bytes
+static const unsigned int SEND_BUF_SIZE = 1024 * 1024;  // 1 MiB
+static const unsigned int RECV_BUF_SIZE = 512;          // 512 Bytes
 
 class TCPServer
 {
 public:
-    TCPServer(int port = 8888);
+    TCPServer(MessageDecoder &decoder, int port = 8888);
     ~TCPServer();
 
     bool start();
@@ -68,62 +67,7 @@ private:
     unique_ptr<thread> thread_send;
     atomic_bool thread_send_terminated{false};
 
-    MessageDecoder decoder;
-};
-
-class TCPStreamBuf : public std::streambuf
-{
-
-public:
-    TCPStreamBuf(TCPServer *server) : server(server)
-    {
-        setp(buf, buf + STREAM_BUF_SIZE - 1);
-    }
-
-protected:
-    void send()
-    {
-        std::ptrdiff_t len = pptr() - pbase();
-        server->sendData((uint8_t *)pbase(), len);
-
-        pbump(-len);
-    }
-
-private:
-    TCPStreamBuf(const TCPStreamBuf &) = delete;
-    TCPStreamBuf &operator=(const TCPStreamBuf &) = delete;
-
-    int sync() override
-    {
-        send();
-        return 0;
-    }
-
-    int_type overflow(int_type ch) override
-    {
-        if (ch != traits_type::eof())
-        {
-            assert(std::less_equal<char *>()(pptr(), epptr()));
-            *pptr() = ch;
-            pbump(1);
-            send();
-            return ch;
-        }
-
-        return traits_type::eof();
-    }
-
-    char buf[STREAM_BUF_SIZE];
-    TCPServer *server;
-};
-
-class TCPStream : public std::ostream
-{
-public:
-    TCPStream(TCPServer *server) : buf(server) { rdbuf(&buf); }
-
-private:
-    TCPStreamBuf buf;
+    MessageDecoder &decoder;
 };
 
 #endif /* SRC_COMMUNICATION_TCPSERVER_H */

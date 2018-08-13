@@ -44,32 +44,32 @@ public:
     ~Logger() {}
 
     template <typename T, typename... Args>
-    void info(const char* str, T value, Args... args)
+    void i(const char* str, T value, Args... args)
     {
         log(LOG_INFO, str, value, args...);
     }
-    void info(const char* str) { log(LOG_INFO, str); }
+    void i(const char* str) { log(LOG_INFO, str); }
 
     template <typename T, typename... Args>
-    void debug(const char* str, T value, Args... args)
+    void d(const char* str, T value, Args... args)
     {
         log(LOG_DEBUG, str, value, args...);
     }
-    void debug(const char* str) { log(LOG_DEBUG, str); }
+    void d(const char* str) { log(LOG_DEBUG, str); }
 
     template <typename T, typename... Args>
-    void warn(const char* str, T value, Args... args)
+    void w(const char* str, T value, Args... args)
     {
         log(LOG_WARNING, str, value, args...);
     }
-    void warn(const char* str) { log(LOG_WARNING, str); }
+    void w(const char* str) { log(LOG_WARNING, str); }
 
     template <typename T, typename... Args>
-    void err(const char* str, T value, Args... args)
+    void e(const char* str, T value, Args... args)
     {
         log(LOG_ERROR, str, value, args...);
     }
-    void err(const char* str) { log(LOG_ERROR, str); }
+    void e(const char* str) { log(LOG_ERROR, str); }
 
     void addStream(ostream* stream, LogLevel minlevel)
     {
@@ -112,9 +112,10 @@ public:
         {
             if (level >= (*it).second)
             {
-                *(*it).first << std::put_time(&tm, "[%d-%m-%Y %H:%M:%S]")
-                             << std::left << std::setw(10)
-                             << getLogLevelString(level) << str << endl;
+                *(*it).first << std::put_time(&tm, "[%H:%M:%S]") << std::left
+                             << std::setw(10) << getLogLevelString(level) << str
+                             << endl;
+                (*it).first->flush();
             }
         }
     }
@@ -131,6 +132,6 @@ private:
     mutex mtx_streams;
 };
 
-extern Logger log;
+extern Logger Log;
 
 #endif /* SRC_LOGGER_H */

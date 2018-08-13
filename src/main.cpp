@@ -1,12 +1,16 @@
 #include "CameraWrapper.h"
 
+#include <stdlib.h>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <thread>
 #include "circular_buffer.h"
-#include "communication/TCPServer.h"
+#include "commands/Commands.h"
+#include "communication/MessageDecoder.h"
+#include "communication/TCPStream.h"
+#include "functions/camerafunction.h"
 #include "functions/intervalometer.h"
 #include "functions/sequencer.h"
 #include "logger.h"
@@ -17,39 +21,189 @@ using namespace std::this_thread;
 using std::chrono::milliseconds;
 using std::chrono::seconds;
 
-Logger log;
+Logger Log;
 
+CameraWrapper* camera;
+
+TCPServer* server;
+MessageHandler* msghandler;
+MessageDecoder* decoder;
+MessageEncoder* encoder;
+
+NetStream* netstream;
 std::ofstream ofs("cameracontroller_log.txt", std::ofstream::out);
 
-void printBuf(uint8_t* buf, size_t s)
-{
-    for (size_t i = 0; i < s; i++)
-    {
-        printf(" %d ", buf[i]);
-    }
+CameraFunction* activeFunction = nullptr;
 
-    printf("\n");
+class CommandHandler : public OnMessageReceivedListener
+{
+    void onCommandReceived(const Command& command) override
+    {
+        switch (command.cmd_id)
+        {
+            case CMD_ID_REBOOT:
+                Log.i("Received reboot command");
+                sleep_for(seconds(5));
+                system("sudo reboot");
+                break;
+            case CMD_ID_SHUTDOWN:
+                Log.i("Received shutdown command");
+                sleep_for(seconds(5));
+                system("sudo halt");
+                break;
+            case CMD_ID_CAMERA_TEST_CONNECTION:
+                if (camera->isConnected())
+                {
+                    Log.i("Camera connected.");
+                }
+                else
+                {
+                    Log.w("Camera not connected.");
+                    break;
+                }
+                if (camera->isResponsive())
+                {
+                    Log.i("Camera responsive.");
+                }
+                else
+                {
+                    Log.w("Camera not responsive.");
+                    break;
+                }
+                break;
+            case CMD_ID_CAMERA_RECONNECT:
+                Log.i("Disconnecting...");
+                camera->disconnect();
+                sleep_for(seconds(5));
+                Log.i("Reconnecting...");
+                camera->connect();
+                break;
+            case CMD_ID_SEQUENCERSETUP:
+            {
+                // Cast
+                const SequencerSetupCommand& cmd =
+                    reinterpret_cast<const SequencerSetupCommand&>(command);
+
+                if (activeFunction != nullptr)
+                {
+
+                    if (!activeFunction->isStarted() &&
+                        !activeFunction->isOperating() &&
+                        activeFunction->getID() == FunctionID::SEQUENCER)
+                    {
+                        // Reconfigure
+                        Sequencer* s =
+                            reinterpret_cast<Sequencer*>(activeFunction);
+                        s->configure(cmd.num_exposures, cmd.exp_time);
+                        s->downloadAfterExposure(cmd.download);
+                        break;
+                    }
+                    else if (activeFunction->isFinished())
+                    {
+                        // Delete the old function
+                        delete activeFunction;
+                    }
+                }
+
+                activeFunction = new Sequencer(cmd.num_exposures, cmd.exp_time,
+                                               cmd.download);
+
+                break;
+            }
+            case CMD_ID_DOWNLOAD_AFTER_EXPOSURE:
+            {
+                const DownloadAfterExposureCommand& cmd =
+                    reinterpret_cast<const DownloadAfterExposureCommand&>(
+                        command);
+                if (activeFunction != nullptr)
+                {
+                    activeFunction->downloadAfterExposure(cmd.download);
+                    Log.i("Downloading after exposure: %s",
+                          cmd.download ? "yes" : "no");
+                }
+                else
+                {
+                    Log.w("No function configured.");
+                }
+                break;
+            }
+            case CMD_ID_FUNCTION_TEST_CAPTURE:
+            {
+                if (activeFunction != nullptr)
+                {
+                    activeFunction->testCapture();
+                }
+                else if (activeFunction == nullptr)
+                {
+                    Log.w("No function configured.");
+                }
+                break;
+            }
+            case CMD_ID_FUNCTIONSTART:
+            {
+                if (activeFunction != nullptr)
+                {
+                    activeFunction->start();
+                }
+                else if (activeFunction == nullptr)
+                {
+                    Log.w("No function configured.");
+                }
+                break;
+            }
+
+            case CMD_ID_FUNCTIONSTOP:
+            {
+                if (activeFunction != nullptr && activeFunction->isStarted())
+                {
+                    activeFunction->abort();
+                }
+                else if (activeFunction == nullptr)
+                {
+                    Log.w("No function configured.");
+                }
+            }
+        }
+    }
+};
+
+CommandHandler* cmdhandler;
+
+void init()
+{
+    camera     = &CameraWrapper::getInstance();
+    cmdhandler = new CommandHandler();
+    msghandler = new MessageHandler(*cmdhandler);
+    decoder    = new MessageDecoder(*msghandler);
+    server     = new TCPServer(*decoder);
+
+    encoder   = new MessageEncoder(server);
+    netstream = new NetStream(encoder);
+
+    // camera->connect();
 }
+
+#include "utils/RemoteTrigger.h"
+
 int main()
 {
-    TCPServer s{};
-    TCPStream tcps{&s};
+    Log.addStream(&ofs, LOG_DEBUG);
 
-    log.addStream(&tcps, LOG_INFO);
+    initTrigger();
+    init();
 
-    s.start();
+    Log.addStream(netstream, LOG_INFO);
 
-    sleep_for(seconds(3));
+    server->start();
+    sleep_for(seconds(1));
 
     while (true)
     {
-        // tcps.flush();
-        string str = "I'm awake!\n";
-
-        s.sendData((const uint8_t*)str.c_str(), str.length());
-        sleep_for(seconds(5));
+        Log.i("Heartbeat");
+        sleep_for(seconds(60));
     }
 
     ofs.close();
+
     return 0;
 }

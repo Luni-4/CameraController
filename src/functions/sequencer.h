@@ -16,6 +16,7 @@
 #include <thread>
 
 #include "camera/CameraWrapper.h"
+#include "camerafunction.h"
 
 using std::atomic_bool;
 
@@ -31,7 +32,7 @@ using std::chrono::milliseconds;
  * Takes N photos one after the other, with as minimum delay as possible.
  * Optionally downloads the photo after it is taken.
  */
-class Sequencer
+class Sequencer : public CameraFunction
 {
 public:
     struct SequencerStats
@@ -64,9 +65,9 @@ public:
 
         void print()
         {
-            printf(
-                "Intertime: %d ms, Mean: %d ms, Max: %d ms (Exp time: %d ms)\n",
-                last_intertime, mean_intertime(), max_intertime, exposure_time);
+            Log.i("Intertime: %d ms, Mean: %d ms, Max: %d ms (Exp time: %d ms)",
+                  last_intertime, mean_intertime(), max_intertime,
+                  exposure_time);
         }
     };
 
@@ -75,31 +76,38 @@ public:
      * @param n_exposures Number of exposures to take
      * @param exposure_time Exposure duration in ms
      */
-    Sequencer(int n_exposures, int exposure_time);
+    Sequencer(int n_exposures, int exposure_time,
+              bool download_after_exp = false,
+              string default_folder   = DEFAULT_DOWNLOAD_FOLDER);
 
     ~Sequencer();
 
-    void setDownloadAfterExposure(bool value)
+    void downloadAfterExposure(bool value) override
     {
         download_after_exposure = value;
     };
 
-    void setDownloadFolder(string download_folder)
-    {
-        this->download_folder = download_folder;
-    };
+    bool downloadAfterExposure() override { return download_after_exposure; };
 
-    bool downloadAfterExposure() { return download_after_exposure; };
+    FunctionID getID() override { return FunctionID::SEQUENCER; }
 
-    bool start();
+    void configure(int n_exposures, int exposure_time);
 
-    void abort();
+    bool start() override;
+
+    void abort() override;
+
+    /**
+     * Checks if the camera has began acquiring the exposures
+     * @return True if the process has begun
+     */
+    bool isStarted() override { return started; }
 
     /**
      * Checks if the camera has taken all the requested exposures
      * @return True if intervalometer has finished
      */
-    bool isFinished();
+    bool isFinished() override;
 
     /**
      * Download the last picture taken
@@ -108,13 +116,17 @@ public:
      */
     bool downloadLastPicture(string path);
 
+protected:
+    bool capture() override;
+
 private:
     void run();
 
     bool started = false;
 
     atomic_bool finished{};
-    const int num_shots;
+    int num_shots;
+    int exposure_time;
 
     atomic_bool download_after_exposure{};
     string download_folder{};
@@ -126,10 +138,7 @@ private:
 
     CameraFilePath last_shot_path;
 
-    CameraWrapper& camera;
     SequencerStats stats;
-
-    const int exposure_time;
 };
 
 #endif /* SRC_FUNCTIONS_SEQUENCER_H */

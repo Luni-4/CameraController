@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "camera/CameraWrapper.h"
+#include "camerafunction.h"
 
 using std::atomic_bool;
 
@@ -29,7 +30,7 @@ using std::unique_ptr;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-class Intervalometer
+class Intervalometer : public CameraFunction
 {
 public:
     struct IntervalometerStats
@@ -64,18 +65,35 @@ public:
      * @param n_shots Number of exposures to take
      * @param interval Time between the start of each exposure in milliseconds
      */
-    Intervalometer(int n_exposures, int interval);
-    ~Intervalometer();
+    Intervalometer(int n_exposures, int interval,
+                   string default_folder = DEFAULT_DOWNLOAD_FOLDER);
 
-    bool start();
+    virtual ~Intervalometer();
 
-    void abort();
+    FunctionID getID() override { return FunctionID::INTERVALOMETER; }
+
+    bool start() override;
+
+    void abort() override;
+
+    void downloadAfterExposure(bool value) override
+    {
+        download_after_exposure = value;
+    };
+
+    bool downloadAfterExposure() override { return download_after_exposure; };
+
+    /**
+     * Checks if the camera has began acquiring the exposures
+     * @return True if the process has begun
+     */
+    bool isStarted() { return started; }
 
     /**
      * Checks if the camera has taken all the requested exposures
      * @return True if intervalometer has finished
      */
-    bool isFinished();
+    bool isFinished() override;
 
     /**
      * Download the last picture taken
@@ -84,17 +102,15 @@ public:
      */
     bool downloadLastPicture(string path);
 
+protected:
+    bool capture() override;
+
 private:
     void run();
 
-    /**
-     * Captures a picture on the camera and stores the location in last_shot
-     * @return Path of the picture on the camera
-     */
-    CameraFilePath capture();
-
     bool started = false;
     atomic_bool finished{};
+    atomic_bool download_after_exposure{};
 
     const milliseconds interval;
     const int num_shots;
@@ -107,9 +123,8 @@ private:
 
     unique_ptr<thread> thread_run;
 
+    string download_folder{};
     CameraFilePath last_shot_path;
-
-    CameraWrapper& camera;
 };
 
 #endif /* SRC_FUNCTIONS_INTERVALOMETER_H */

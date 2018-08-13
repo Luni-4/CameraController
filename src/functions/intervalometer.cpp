@@ -4,7 +4,7 @@
  */
 
 #include "intervalometer.h"
-#include "debug.h"
+#include "logger.h"
 
 using namespace std::this_thread;
 
@@ -17,9 +17,10 @@ using std::chrono::system_clock;
 typedef unique_lock<mutex> Lock;
 typedef system_clock Clock;
 
-Intervalometer::Intervalometer(int n_exposures, int interval)
-    : interval(milliseconds(interval)), num_shots(n_exposures),
-      camera(CameraWrapper::getInstance())
+Intervalometer::Intervalometer(int n_exposures, int interval,
+                               string default_folder)
+    : CameraFunction(), interval(milliseconds(interval)),
+      num_shots(n_exposures), download_folder(default_folder)
 {
 }
 
@@ -27,14 +28,18 @@ Intervalometer::~Intervalometer() {}
 
 bool Intervalometer::start()
 {
+    if (isTesting())
+    {
+        Log.e("Can't start while testing.");
+        return false;
+    }
+
     if (!started)
     {
-        if (!camera.isConnected())
+        if (!connectCamera())
         {
-            if (!camera.connect())
-            {
-                return false;
-            }
+            Log.e("Cannot start intervalometer");
+            return false;
         }
         started = true;
 
@@ -63,10 +68,13 @@ void Intervalometer::run()
     {
         auto start         = Clock::now();
         auto next_exposure = start + interval;
-
-        CameraFilePath p = capture();
         i++;
-        D(printf("Captured exposure %d\n", i));
+
+        if (!capture())
+        {
+            Log.e("Capture %d failed.", i);
+            break;
+        }
 
         auto end = Clock::now();
 
@@ -75,13 +83,10 @@ void Intervalometer::run()
 
         if (end > next_exposure)
         {
-            D(printf("Delayed exposure by: %d ms\n",
-                     -1 * (int)remaining.count()));
+            Log.w("Delayed exposure by: %d ms", -1 * (int)remaining.count());
         }
 
         Lock lk(mutex_run);
-
-        last_shot_path = p;
         stats.registerExposureStat(-1 * (int)remaining.count());
 
         while (!abort_cond)
@@ -92,21 +97,51 @@ void Intervalometer::run()
             }
         }
         auto end2 = Clock::now();
-        D(printf("Period duration: %d ms\n",
-                 (int)duration_cast<milliseconds>(end2 - start).count()));
+        Log.i("Period duration: %d ms",
+              (int)duration_cast<milliseconds>(end2 - start).count());
     }
 
     finished = true;
-    D(printf("Runner thread ended. Shots taken: %d. Aborted: %s\n", i,
-             abort_cond ? "true" : "false"));
+    Log.i("Intervalometer finished. Shots taken: %d/%d. Aborted: %s", i,
+          num_shots, abort_cond ? "true" : "false");
 }
 
-CameraFilePath Intervalometer::capture()
+bool Intervalometer::capture()
 {
-    CameraFilePath path;
-    camera.capture(path);
-    // sleep_for(milliseconds(2 * 1000));
-    return path;
+    CameraFilePath p{};
+    if (!camera.capture(p))
+    {
+        Log.i("Sequencer capture failed.");
+        return false;
+    }
+
+    Log.i("Captured exposure");
+
+    {
+        Lock lk(mutex_run);
+        last_shot_path = p;
+    }
+
+    if (download_after_exposure)
+    {
+        auto download_start = Clock::now();
+        Log.i("Downloading...");
+        bool download_success = downloadLastPicture(download_folder);
+        auto download_end     = Clock::now();
+
+        if (download_success)
+        {
+            Log.i(
+                "Download complete. duration: %d ms",
+                (int)duration_cast<milliseconds>(download_end - download_start)
+                    .count());
+        }
+        else
+        {
+            Log.e("Download failed.");
+        }
+    }
+    return true;
 }
 
 bool Intervalometer::downloadLastPicture(string destination_folder)

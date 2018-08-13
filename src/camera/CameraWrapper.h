@@ -7,6 +7,7 @@
 #define SRC_CAMERA_CAMERA_H
 
 #include <gphoto2/gphoto2.h>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
@@ -31,14 +32,19 @@ public:
     void operator=(CameraWrapper const&) = delete;
 
     bool connect();
+    void disconnect();
 
     bool isConnected();
+
+    bool isResponsive();
 
     string getSerialNumber();
 
     bool capture();
 
     bool capture(CameraFilePath& path);
+
+    bool remoteCapture(int exposure_time, CameraFilePath& path);
 
     bool downloadFile(CameraFilePath path, string destination);
 
@@ -72,7 +78,7 @@ public:
      * Wait until a capture triggered by an external event is complete
      * @return true if the event occurred, false if there were problems
      */
-    bool waitForCapture();
+    bool waitForCapture(CameraFilePath& file, int timeout = 30000);
 
     /**
      * Ordered list of available exposure times in microseconds. 0 if BULB
@@ -85,6 +91,8 @@ private:
     ~CameraWrapper();
 
     void freeCamera();
+
+    bool connected = false;
 
     static int exposureTimeFromString(string exposure_time);
 

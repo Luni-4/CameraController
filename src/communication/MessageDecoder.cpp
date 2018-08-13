@@ -11,7 +11,9 @@
 using std::max;
 using std::min;
 
-MessageDecoder::MessageDecoder() {}
+MessageDecoder::MessageDecoder(MessageHandler& msgHandler) : handler(msgHandler)
+{
+}
 
 MessageDecoder::~MessageDecoder()
 {
@@ -20,7 +22,7 @@ MessageDecoder::~MessageDecoder()
         delete message;
     }
 }
-void MessageDecoder::dispatch() {}
+void MessageDecoder::dispatch() { handler.handleMessage(*message); }
 
 void MessageDecoder::decode(uint8_t* data, size_t len)
 {
@@ -50,7 +52,13 @@ void MessageDecoder::decode(uint8_t* data, size_t len)
                 break;
             case DecoderState::TYPE_RECEIVED:
             {
-                uint16_t size = data[i];
+                temp_size1 = data[i];
+                state      = DecoderState::SIZE1_RECEIVED;
+                break;
+            }
+            case DecoderState::SIZE1_RECEIVED:
+            {
+                uint16_t size = data[i] << 8 | (uint16_t)temp_size1;
                 state         = DecoderState::RECEIVING_DATA;
                 if (message != nullptr)
                 {
@@ -59,7 +67,7 @@ void MessageDecoder::decode(uint8_t* data, size_t len)
                 message       = new Message(temp_type, size);
                 received_data = 0;
                 state         = DecoderState::RECEIVING_DATA;
-                log.debug("Message created: type:%d, size:%d", temp_type, size);
+                Log.d("Message created: type:%d, size:%d", temp_type, size);
                 break;
             }
             case DecoderState::RECEIVING_DATA:
@@ -67,12 +75,11 @@ void MessageDecoder::decode(uint8_t* data, size_t len)
                 size_t sz = min(len - i, (size_t)message->size - received_data);
                 memcpy(message->data + received_data, data + i, sz);
                 received_data += sz;
-                i += sz;
-                log.debug("Receive data: received: %d, sz: %d, i: %d, newi: %d",
-                          received_data, sz, i - sz, i);
+                i += sz - 1;  // i must point to the last copied byte
+                Log.d("Receive data: received: %d, sz: %d", received_data, sz);
                 if (received_data == message->size)
                 {
-                    log.debug("Dispatch.");
+                    Log.d("Dispatch.");
                     dispatch();
                     state = DecoderState::START;
                 }

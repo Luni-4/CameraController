@@ -14,7 +14,8 @@
 
 using std::unique_lock;
 
-TCPServer::TCPServer(int port) : port(port)
+TCPServer::TCPServer(MessageDecoder &decoder, int port)
+    : port(port), decoder(decoder)
 {
     recv_buf = new uint8_t[RECV_BUF_SIZE];
     memset(recv_buf, 0, RECV_BUF_SIZE);
@@ -31,8 +32,7 @@ bool TCPServer::start()
 
     if (sck_server < 0)
     {
-        log.err("Error opening server socket: %d, errno: %d", sck_server,
-                errno);
+        Log.e("Error opening server socket: %d, errno: %d", sck_server, errno);
         return false;
     }
 
@@ -40,17 +40,27 @@ bool TCPServer::start()
     addr_serv.sin_addr.s_addr = INADDR_ANY;
     addr_serv.sin_port        = htons(port);
 
+    int yes = 1;
+    result =
+        setsockopt(sck_server, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+
+    if (result == -1)
+    {
+        Log.e("Error setting up socket: %d, errno: %d", result, errno);
+        return false;
+    }
+
     result = bind(sck_server, (sockaddr *)&addr_serv, sizeof(addr_serv));
     if (result != 0)
     {
-        log.err("Error binding socket: %d, errno: %d", result, errno);
+        Log.e("Error binding socket: %d, errno: %d", result, errno);
         return false;
     }
 
     result = listen(sck_server, 1);
     if (result != 0)
     {
-        log.err("Error listening: %d", result);
+        Log.e("Error listening: %d", result);
         return false;
     }
 
@@ -81,15 +91,15 @@ void TCPServer::fn_server()
 
     while (true)
     {
-        log.info("Waiting for client...");
+        Log.i("Waiting for client...");
         sck_client = accept(sck_server, (sockaddr *)&addr_client, &clilen);
 
         if (sck_client < 0)
         {
-            log.err("Error accepting client connection: %d", result);
+            Log.e("Error accepting client connection: %d", result);
             continue;
         }
-        log.info("Client connected.");
+        Log.i("Client connected.");
 
         client_connected = true;
         cv_sender.notify_one();
@@ -97,12 +107,12 @@ void TCPServer::fn_server()
         while (receive())
             ;
 
-        log.info("Client disconnected");
+        Log.i("Client disconnected");
         client_connected = false;
         cv_sender.notify_one();
     }
 
-    log.err("Server thread terminated. (sck: %d)", sck_server);
+    Log.e("Server thread terminated. (sck: %d)", sck_server);
 }
 
 void TCPServer::fn_sender()
@@ -121,16 +131,13 @@ void TCPServer::fn_sender()
             }
             len = send_buf.get(buf, buf_size);
         }
-
         send(sck_client.load(), buf, len, 0);
     }
 }
 
 bool TCPServer::receive()
 {
-    // bzero((void *)recv_buf, BUF_SIZE);
     int n = read(sck_client, recv_buf, RECV_BUF_SIZE);
-    log.info("Read %d bytes.", n);
     if (n > 0)
     {
         decoder.decode(recv_buf, n);
