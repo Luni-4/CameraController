@@ -10,7 +10,13 @@
 
 static const int PIN_TRIGGER = 25;
 
+// Using an IR led
 void initTrigger();
-void trigger();
+void trigger(unsigned int repetitions = 1);
+
+// Using a pre build remote
+void initRemote();
+void remoteTrigger();
+
 
 #endif /* SRC_UTILS_REMOTETRIGGER_H */
