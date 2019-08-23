@@ -11,6 +11,7 @@
 
 #include "Message.h"
 #include "commands/Commands.h"
+#include "logger.h"
 
 using std::string;
 using std::vector;
@@ -44,7 +45,16 @@ public:
                     listener.onCommandReceived(*c);
                     delete c;
                 }
+                else
+                {
+                    Log.e("Couldn't decode telecommand.");
+                }
 
+                break;
+            }
+            default:
+            {
+                Log.e("Unknown message received.");
                 break;
             }
         }
