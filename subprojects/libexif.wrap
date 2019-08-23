@@ -1,0 +1,4 @@
+[wrap-git]
+directory = libexif
+url = https://github.com/libexif/libexif
+revision = head

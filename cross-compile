@@ -1,0 +1,4 @@
+meson build \
+      --buildtype release \
+      --cross-file cross_file.txt
+ninja -C build
