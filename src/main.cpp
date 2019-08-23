@@ -14,6 +14,7 @@
 #include "functions/intervalometer.h"
 #include "functions/sequencer.h"
 #include "logger.h"
+#include "utils/RemoteTrigger.h"
 
 using namespace std::chrono;
 using namespace std::this_thread;
@@ -86,27 +87,60 @@ class CommandHandler : public OnMessageReceivedListener
 
                 if (activeFunction != nullptr)
                 {
-
-                    if (!activeFunction->isStarted() &&
-                        !activeFunction->isOperating() &&
-                        activeFunction->getID() == FunctionID::SEQUENCER)
+                    if (!activeFunction->isOperating())
                     {
-                        // Reconfigure
-                        Sequencer* s =
-                            reinterpret_cast<Sequencer*>(activeFunction);
-                        s->configure(cmd.num_exposures, cmd.exp_time);
-                        s->downloadAfterExposure(cmd.download);
-                        break;
-                    }
-                    else if (activeFunction->isFinished())
-                    {
-                        // Delete the old function
+                        // If finished, delete old sequencer
                         delete activeFunction;
+                        // Create a new sequencer
+                        activeFunction = new Sequencer(
+                            cmd.num_exposures, cmd.exp_time, cmd.download);
+                    }
+                    else
+                    {
+                        Log.e(
+                                "Cannot configure sequencer: Function "
+                                "already running.");
                     }
                 }
+                else
+                {
+                    // No function configured
+                    activeFunction = new Sequencer(
+                        cmd.num_exposures, cmd.exp_time, cmd.download);
+                }
 
-                activeFunction = new Sequencer(cmd.num_exposures, cmd.exp_time,
-                                               cmd.download);
+                        break;
+                    }
+            case CMD_ID_INTERVALOMETERSETUP:
+            {
+                Log.d("Received intervalometer config");
+                // Cast
+                const IntervalometerSetupCommand& cmd =
+                    reinterpret_cast<const IntervalometerSetupCommand&>(command);
+
+                if (activeFunction != nullptr)
+                {
+                    if (!activeFunction->isOperating())
+                    {
+                        // If finished, delete old sequencer
+                        delete activeFunction;
+                        // Create a new sequencer
+                        activeFunction = new Intervalometer(
+                            cmd.num_exposures, cmd.interval, cmd.exp_time, cmd.download);
+                    }
+                    else
+                    {
+                        Log.e(
+                                "Cannot configure intervalometer: Function "
+                                "already running.");
+                    }
+                    }
+                else
+                {
+                    // No function configured
+                    activeFunction = new Intervalometer(
+                        cmd.num_exposures, cmd.interval, cmd.exp_time, cmd.download);
+                }
 
                 break;
             }
@@ -182,8 +216,6 @@ void init()
 
     // camera->connect();
 }
-
-#include "utils/RemoteTrigger.h"
 
 int main()
 {

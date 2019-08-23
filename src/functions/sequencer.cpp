@@ -18,12 +18,13 @@ typedef unique_lock<mutex> Lock;
 typedef system_clock Clock;
 
 Sequencer::Sequencer(int n_exposures, int exposure_time,
-                     bool download_after_exp, string default_folder)
+                     bool download_after_exp, string download_folder)
 
-    : CameraFunction(), num_shots(n_exposures), exposure_time(exposure_time),
-      download_after_exposure(download_after_exp),
-      download_folder(default_folder)
+    : CameraFunction(download_folder), num_shots(n_exposures),
+      exposure_time(exposure_time)
 {
+    downloadAfterExposure(download_after_exp);
+
     stats.exposure_time        = exposure_time;
     stats.programmed_exposures = n_exposures;
 
@@ -32,21 +33,6 @@ Sequencer::Sequencer(int n_exposures, int exposure_time,
 }
 
 Sequencer::~Sequencer() {}
-
-void Sequencer::configure(int n_exposures, int exposure_time)
-{
-    if (!isStarted() && !isOperating())
-    {
-        Log.i("Sequencer configured: Number of exposures: %d, Exp time: %d",
-              n_exposures, exposure_time);
-        num_shots           = n_exposures;
-        this->exposure_time = exposure_time;
-    }
-    else
-    {
-        Log.w("Cannot configure: already running.");
-    }
-}
 
 bool Sequencer::start()
 {
@@ -76,12 +62,11 @@ bool Sequencer::start()
         Log.i("Sequencer already started");
     }
 
-    return true;
+    return false;
 }
 
 void Sequencer::abort()
 {
-
     if (started && !finished)
     {
         Log.i("Aborting sequencer");
@@ -103,7 +88,8 @@ void Sequencer::run()
         i++;
         auto start = Clock::now();
 
-        if (!capture())
+        if (!camera.capture(exposure_time,
+                            downloadAfterExposure() ? download_folder : ""))
         {
             Log.e("Capture %d failed.", i);
             break;
@@ -116,12 +102,14 @@ void Sequencer::run()
 
         int intertime = exposure_duration - exposure_time;
 
-        Lock lk(mutex_run);
+        {
+            Lock lk(mutex_run);
 
-        stats.registerExposureStat(intertime);
+            stats.registerExposureStat(intertime);
 
-        Log.i("Sequencer shot %d/%d completed.", i, num_shots);
-        stats.print();
+            Log.i("Sequencer shot %d/%d completed.", i, num_shots);
+            stats.print();
+        }
     }
 
     finished = true;
@@ -129,62 +117,17 @@ void Sequencer::run()
           abort_cond ? "true" : "false");
 }
 
-bool Sequencer::capture()
+void Sequencer::doTestCapture()
 {
-    CameraFilePath p{};
-    if (camera.getCurrentExposureTime() == 0)  // If BULB use remote trigger
+    testing = true;
+    if (camera.capture(exposure_time,
+                       downloadAfterExposure() ? download_folder : ""))
     {
-        if (!camera.remoteCapture(exposure_time, p))
-        {
-            Log.e("Sequencer capture failed.");
-            return false;
-        }
+        Log.i("Test capture completed successfully");
     }
     else
     {
-        if (!camera.capture(p))
-        {
-            Log.e("Sequencer capture failed.");
-            return false;
-        }
+        Log.i("Test capture finished with errors.");
     }
-
-    Log.d("Captured exposure");
-
-    {
-        Lock lk(mutex_run);
-        last_shot_path = p;
-    }
-
-    if (download_after_exposure)
-    {
-        auto download_start = Clock::now();
-        Log.d("Downloading...");
-        bool download_success = downloadLastPicture(download_folder);
-        auto download_end     = Clock::now();
-
-        if (download_success)
-        {
-            Log.i(
-                "Download complete. duration: %d ms",
-                (int)duration_cast<milliseconds>(download_end - download_start)
-                    .count());
-        }
-        else
-        {
-            Log.e("Download failed.");
-        }
-    }
-    return true;
-}
-
-bool Sequencer::downloadLastPicture(string destination_folder)
-{
-    CameraFilePath p;
-    {
-        Lock lk(mutex_run);
-        p = last_shot_path;
-    }
-
-    return camera.downloadFile(p, destination_folder + string(p.name));
+    testing = false;
 }

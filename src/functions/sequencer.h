@@ -7,7 +7,6 @@
 #define SRC_FUNCTIONS_SEQUENCER_H
 
 #include <gphoto2/gphoto2-camera.h>
-#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -17,8 +16,6 @@
 
 #include "camera/CameraWrapper.h"
 #include "camerafunction.h"
-
-using std::atomic_bool;
 
 using std::mutex;
 
@@ -82,12 +79,6 @@ public:
 
     ~Sequencer();
 
-    void downloadAfterExposure(bool value) override
-    {
-        download_after_exposure = value;
-    };
-
-    bool downloadAfterExposure() override { return download_after_exposure; };
 
     FunctionID getID() override { return FunctionID::SEQUENCER; }
 
@@ -108,28 +99,18 @@ public:
      * @return True if intervalometer has finished
      */
     bool isFinished() override;
-
-    /**
-     * Download the last picture taken
-     * @param path Folder where to download the picture
-     * @return True if download successful
-     */
-    bool downloadLastPicture(string path);
-
 protected:
-    bool capture() override;
-
+    void doTestCapture() override;
 private:
     void run();
 
     bool started = false;
 
     atomic_bool finished{};
-    int num_shots;
-    int exposure_time;
 
-    atomic_bool download_after_exposure{};
-    string download_folder{};
+    const int num_shots;
+    const int exposure_time;
+
 
     mutex mutex_run;
     atomic_bool abort_cond{};

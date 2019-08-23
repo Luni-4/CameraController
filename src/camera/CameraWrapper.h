@@ -39,10 +39,12 @@ public:
     bool isResponsive();
 
     string getSerialNumber();
+    
+    bool capture(int exposure_time, string download_folder = "");
 
-    bool capture();
+    bool wiredCapture();
 
-    bool capture(CameraFilePath& path);
+    bool wiredCapture(CameraFilePath& path);
 
     bool remoteCapture(int exposure_time, CameraFilePath& path);
 

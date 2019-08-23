@@ -89,6 +89,51 @@ bool CameraWrapper::isResponsive()
     return connected && camera != nullptr && getSerialNumber() == serial;
 }
 
+bool CameraWrapper::capture(int exposure_time, string download_folder)
+{
+    CameraFilePath p{};
+
+    if (getCurrentExposureTime() == 0)  // If BULB use remote trigger
+    {
+        if (!remoteCapture(exposure_time, p))
+        {
+            Log.e("Sequencer capture failed.");
+            return false;
+        }
+    }
+    else
+    {
+        if (!wiredCapture(p))
+        {
+            Log.e("Sequencer capture failed.");
+            return false;
+        }
+    }
+
+    Log.d("Captured exposure");
+
+    if (download_folder.compare("") != 0)
+    {
+        auto download_start = Clock::now();
+        Log.d("Downloading...");
+        bool download_success = downloadFile(p, download_folder + string(p.name));
+        auto download_end     = Clock::now();
+
+        if (download_success)
+        {
+            Log.i(
+                "Download complete. duration: %d ms",
+                (int)duration_cast<milliseconds>(download_end - download_start)
+                    .count());
+        }
+        else
+        {
+            Log.e("Download failed.");
+        }
+    }
+    return true;
+}
+
 bool CameraWrapper::remoteCapture(int exposure_time, CameraFilePath& path)
 {
     int curr_exp = getCurrentExposureTime();
@@ -126,18 +171,18 @@ bool CameraWrapper::remoteCapture(int exposure_time, CameraFilePath& path)
     Log.i("Trigger 2");
 
     // Wait a bit before checking for capture completed
-    sleep_for(milliseconds(500));
+    //sleep_for(milliseconds(250));
 
     return waitForCapture(path);
 }
 
-bool CameraWrapper::capture()
+bool CameraWrapper::wiredCapture()
 {
     CameraFilePath path;
-    return capture(path);
+    return wiredCapture(path);
 }
 
-bool CameraWrapper::capture(CameraFilePath& path)
+bool CameraWrapper::wiredCapture(CameraFilePath& path)
 {
     int result = gp_camera_capture(camera, GP_CAPTURE_IMAGE, &path, context);
 
@@ -152,6 +197,8 @@ bool CameraWrapper::capture(CameraFilePath& path)
         return false;
     }
 }
+
+
 
 bool CameraWrapper::downloadFile(CameraFilePath path, string dest_file_path)
 {
@@ -228,7 +275,7 @@ string CameraWrapper::getTextConfigValue(string config_name)
     {
         Log.e("Couldn't get single config (%s): %d", config_name.c_str(),
               result);
-        goto out;
+        return value_str;
     }
 
     const char* value;
@@ -258,7 +305,7 @@ bool CameraWrapper::setConfigValue(string config_name, string value)
     {
         Log.e("Couldn't get single config (%s): %d", config_name.c_str(),
               result);
-        goto out;
+        return success;
     }
     CameraWidgetType type;
     result = gp_widget_get_type(widget, &type);
@@ -338,7 +385,7 @@ vector<string> CameraWrapper::listConfigChoices(string config_name)
     {
         Log.e("Couldn't get single config (%s): %d", config_name.c_str(),
               result);
-        goto out;
+        return choices;
     }
 
     n = gp_widget_count_choices(widget);

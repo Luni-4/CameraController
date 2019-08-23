@@ -21,7 +21,8 @@ const JsonCommandDecoder::DecoderMap JsonCommandDecoder::decoder_map = {
 	{CMD_ID_FUNCTION_TEST_CAPTURE, JsonCommandDecoder::decodeEmptyCommand},
     {CMD_ID_DOWNLOAD_AFTER_EXPOSURE, JsonCommandDecoder::decodeDownloadAfterExposure},
 
-    {CMD_ID_SEQUENCERSETUP, JsonCommandDecoder::decodeSetupSequencer}
+    {CMD_ID_SEQUENCERSETUP, JsonCommandDecoder::decodeSetupSequencer},
+    {CMD_ID_INTERVALOMETERSETUP, JsonCommandDecoder::decodeSetupIntervalometer}
 
 };
 
@@ -55,6 +56,29 @@ bool JsonCommandDecoder::decodeSetupSequencer(Command** cmd, json& j)
         c->cmd_id        = j.at(KEY_CMDID).get<uint8_t>();
         c->num_exposures = j.at(KEY_NUM_EXPOSURES).get<int>();
         c->exp_time      = j.at(KEY_EXPOSURE_TIME).get<int>();
+        c->download      = j.at(KEY_DOWNLOAD).get<bool>();
+    }
+    catch (std::exception& e)
+    {
+        delete c;
+        Log.e(e.what());
+        return false;
+    }
+
+    *cmd = c;
+    return true;
+}
+
+bool JsonCommandDecoder::decodeSetupIntervalometer(Command** cmd, json& j)
+{
+    IntervalometerSetupCommand* c = new IntervalometerSetupCommand();
+
+    try
+    {
+        c->cmd_id        = j.at(KEY_CMDID).get<uint8_t>();
+        c->num_exposures = j.at(KEY_NUM_EXPOSURES).get<int>();
+        c->exp_time      = j.at(KEY_EXPOSURE_TIME).get<int>();
+        c->interval      = j.at(KEY_INTERVAL).get<int>();
         c->download      = j.at(KEY_DOWNLOAD).get<bool>();
     }
     catch (std::exception& e)

@@ -8,7 +8,11 @@
 
 #include "logger.h"
 
+#include <atomic>
 #include <thread>
+#include <future>
+
+using std::atomic_bool;
 using std::thread;
 
 static const char* DEFAULT_DOWNLOAD_FOLDER = "/home/pi/CCCaptures/";
@@ -22,7 +26,10 @@ enum class FunctionID
 class CameraFunction
 {
 public:
-    CameraFunction() : camera(CameraWrapper::getInstance()) {}
+    CameraFunction(string download_folder)
+        : camera(CameraWrapper::getInstance()), download_folder(download_folder)
+    {
+    }
 
     virtual ~CameraFunction() {}
 
@@ -31,8 +38,12 @@ public:
     virtual bool start() = 0;
     virtual void abort() = 0;
 
-    virtual void downloadAfterExposure(bool value) = 0;
-    virtual bool downloadAfterExposure()           = 0;
+    virtual void downloadAfterExposure(bool value)
+    {
+        download_after_exposure = value;
+    };
+
+    virtual bool downloadAfterExposure() { return download_after_exposure; };
 
     virtual bool isStarted()  = 0;
     virtual bool isFinished() = 0;
@@ -43,12 +54,15 @@ public:
         {
             if (!connectCamera())
             {
-                Log.e("Cannot test capture");
+                Log.e("Cannot test capture, camera not connected.");
                 return;
             }
             Log.i("Test capture...");
-            thread t(&CameraFunction::doTestCapture, this);
-            t.detach();
+            std::async(&CameraFunction::doTestCapture, this);
+        }
+        else
+        {
+            Log.w("Cannot test while operating.");
         }
     }
 
@@ -78,26 +92,17 @@ public:
     bool isOperating() { return (isStarted() && !isFinished()) || testing; }
 
 protected:
-    virtual bool capture() = 0;
     bool isTesting() { return testing; }
 
     CameraWrapper& camera;
 
-private:
-    void doTestCapture()
-    {
-        testing = true;
-        if (capture())
-        {
-            Log.i("Test capture completed successfully");
-        }
-        else
-        {
-            Log.i("Test capture finished with errors.");
-        }
-        testing = false;
-    }
+    string download_folder;
+
+    virtual void doTestCapture() = 0;
     bool testing = false;
+private:
+
+    atomic_bool download_after_exposure{};
 };
 
 #endif /* SRC_FUNCTIONS_CAMERAFUNCTION_H */

@@ -40,6 +40,7 @@ enum Commands : uint8_t
 static const char* KEY_CMDID         = "cmd_id";
 static const char* KEY_NUM_EXPOSURES = "num_exposures";
 static const char* KEY_EXPOSURE_TIME = "exposure_time";
+static const char* KEY_INTERVAL      = "interval";
 static const char* KEY_DOWNLOAD      = "download";
 
 class JsonCommandDecoder;
@@ -106,6 +107,32 @@ protected:
     SequencerSetupCommand() : Command() {}
 };
 
+struct IntervalometerSetupCommand : public Command
+{
+    friend class JsonCommandDecoder;
+
+    int num_exposures = 0;
+    int exp_time      = 0;
+    int interval      = 0;
+    bool download     = false;
+
+    IntervalometerSetupCommand(uint8_t cmd_id, int num_exposures, int exp_time,
+                               int interval, bool download = false)
+        : Command(cmd_id), num_exposures(num_exposures), exp_time(exp_time),
+          interval(interval), download(download)
+    {
+    }
+
+    void print() const override
+    {
+        Log.i("ISC{cmd: %d, ne: %d, et: %d, int: %d, d: %s}", cmd_id,
+              num_exposures, exp_time, interval, download ? "true" : "false");
+    }
+
+protected:
+    IntervalometerSetupCommand() : Command() {}
+};
+
 class JsonCommandDecoder
 {
     typedef function<bool(Command**, json&)> Decoder;
@@ -140,6 +167,7 @@ private:
     static bool decodeEmptyCommand(Command** cmd, json& j);
 
     static bool decodeSetupSequencer(Command** cmd, json& j);
+    static bool decodeSetupIntervalometer(Command** cmd, json& j);
 
     static bool decodeDownloadAfterExposure(Command** cmd, json& j);
 
