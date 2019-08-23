@@ -109,8 +109,8 @@ class CommandHandler : public OnMessageReceivedListener
                         cmd.num_exposures, cmd.exp_time, cmd.download);
                 }
 
-                        break;
-                    }
+                break;
+            }
             case CMD_ID_INTERVALOMETERSETUP:
             {
                 Log.d("Received intervalometer config");
@@ -134,7 +134,7 @@ class CommandHandler : public OnMessageReceivedListener
                                 "Cannot configure intervalometer: Function "
                                 "already running.");
                     }
-                    }
+                }
                 else
                 {
                     // No function configured
@@ -219,8 +219,8 @@ void init()
 
 int main()
 {
+    piHiPri(20);
     Log.addStream(&ofs, LOG_DEBUG);
-
     initTrigger();
     init();
 
