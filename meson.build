@@ -30,7 +30,7 @@ deps = []
 # threads dependency
 deps += dependency('threads')
 
-# libefix dependency
+# libexif dependency
 libexif_dep = dependency('libexif', required : false)
 if not libexif_dep.found()
     libexif_proj = subproject('libexif', required: false)
@@ -45,10 +45,32 @@ if not libexif_dep.found()
 endif
 deps += libexif_dep
 
-deps += meson.get_compiler('cpp').find_library('gphoto2_port', dirs: libsdir)
-deps += meson.get_compiler('cpp').find_library('gphoto2', dirs: libsdir)
+# libgphoto2 dependency
+libgphoto2_path = meson.source_root() / 'subprojects' / 'libgphoto2'
+libgphoto2_dep = dependency('libgphoto2', required : false)
+libgphoto2_port_dep = dependency('libgphoto2_port', required : false)
+if not libgphoto2_dep.found()
+    libgphoto2_proj = subproject('libgphoto2', required: false)
+    if not libgphoto2_proj.found()
+        libgphoto2_command = run_command('sh', 'libgphoto2.sh')
+        if libgphoto2_command.returncode() != 0
+           error(libgphoto2_command.stderr().strip())
+        endif
+        libgphoto2_pathlib = libgphoto2_path / 'lib'
+        libgphoto2_dep = cpp.find_library('gphoto2', dirs: libgphoto2_pathlib)
+        libgphoto2_port_dep = cpp.find_library(
+            'gphoto2_port',
+            dirs: libgphoto2_pathlib
+        )
+    endif
+endif
+deps += [libgphoto2_dep, libgphoto2_port_dep]
+deps += meson.get_compiler('cpp').find_library('ltdl', dirs: libgphoto2_path)
+
+#deps += meson.get_compiler('cpp').find_library('gphoto2_port', dirs: libsdir)
+#deps += meson.get_compiler('cpp').find_library('gphoto2', dirs: libsdir)
 deps += meson.get_compiler('cpp').find_library('wiringPi', dirs: libsdir)
-deps += meson.get_compiler('cpp').find_library('ltdl', dirs: libsdir)
+#deps += meson.get_compiler('cpp').find_library('ltdl', dirs: libsdir)
 
 executable(
     'cameracontroller',

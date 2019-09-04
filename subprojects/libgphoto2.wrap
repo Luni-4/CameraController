@@ -1,0 +1,4 @@
+[wrap-git]
+directory = libgphoto2
+url = https://github.com/gphoto/libgphoto2.git
+revision = head
